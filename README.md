@@ -1,6 +1,9 @@
 # MERN Full Stack AI Task Processing Platform
 
-![Dashboard Control Center](./screenshots/dashboard.png)
+<div align="center">
+  <img src="./screenshots/dashboard.png" width="48%" alt="Platform Dashboard" />
+  <img src="./screenshots/argocd_gitops.png" width="48%" alt="Argo CD GitOps Architecture" />
+</div>
 
 A production-grade, highly scalable asynchronous AI task execution platform built using MERN stack, Python background workers, Docker, Kubernetes, and Argo CD GitOps.
 
