@@ -1,0 +1,102 @@
+name: CI/CD Pipeline & GitOps Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-test:
+    name: Lint & Test Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Frontend Dependencies & Lint
+        run: |
+          cd frontend
+          npm ci
+          npm run lint --if-present
+
+      - name: Backend Dependencies & Lint
+        run: |
+          cd backend
+          npm ci
+          npm run lint --if-present
+
+  build-and-push:
+    name: Build & Push Docker Images
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [frontend, backend, worker]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Short SHA
+        id: vars
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.service }}
+          file: ./${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/ai-task-${{ matrix.service }}:${{ env.SHA }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/ai-task-${{ matrix.service }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  gitops-update:
+    name: Update Argo CD Infra Repository
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Infra Repository
+        uses: actions/checkout@v4
+        with:
+          repository: kunalraikwar/ai-task-infra
+          token: ${{ secrets.GITOPS_GITHUB_TOKEN }}
+          path: infra
+
+      - name: Extract Short SHA
+        id: vars
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Update Kubernetes Manifest Image Tags
+        run: |
+          cd infra/k8s
+          sed -i "s|image: kunalraikwar/ai-task-backend:.*|image: kunalraikwar/ai-task-backend:${{ env.SHA }}|g" backend.yaml
+          sed -i "s|image: kunalraikwar/ai-task-worker:.*|image: kunalraikwar/ai-task-worker:${{ env.SHA }}|g" worker.yaml
+          sed -i "s|image: kunalraikwar/ai-task-frontend:.*|image: kunalraikwar/ai-task-frontend:${{ env.SHA }}|g" frontend.yaml
+
+      - name: Commit & Push Changes
+        run: |
+          cd infra
+          git config user.name "GitHub Actions GitOps Bot"
+          git config user.email "gitops@ai-task-platform.com"
+          git add k8s/*.yaml
+          git commit -m "chore(gitops): update image tags to release sha ${{ env.SHA }} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main
