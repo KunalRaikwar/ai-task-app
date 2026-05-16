@@ -1,6 +1,8 @@
-# AI Task Processing Platform (MERN + Python Worker + GitOps)
+# MERN Full Stack AI Task Processing Platform
 
-A complete, production-ready asynchronous AI Task Processing Platform built with a MERN stack backend/frontend, Python background worker, Redis message broker, MongoDB persistence, and deployed using Docker, Kubernetes, and Argo CD GitOps.
+![Dashboard Control Center](./screenshots/dashboard.png)
+
+A production-grade, highly scalable asynchronous AI task execution platform built using MERN stack, Python background workers, Docker, Kubernetes, and Argo CD GitOps.
 
 ---
 
